@@ -5,6 +5,15 @@ const api = axios.create({
   timeout: 10000,
 });
 
+// Always attach token from localStorage on every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('todo_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
