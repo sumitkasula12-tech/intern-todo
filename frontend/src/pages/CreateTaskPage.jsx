@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import taskService from '../services/taskService';
@@ -18,6 +18,7 @@ const schema = z.object({
   dueDate: z.string().nonempty('Due date is required').refine((val) => {
     const selected = new Date(val);
     if (isNaN(selected.getTime())) return false;
+    // Strip hours to compare dates only
     const selectedDate = new Date(selected.getFullYear(), selected.getMonth(), selected.getDate());
     const today = new Date();
     const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -25,88 +26,44 @@ const schema = z.object({
   }, 'Due date cannot be in the past'),
 });
 
-export default function EditTaskPage() {
-  const { id } = useParams();
-  const navigate = useNavigate();
+export default function CreateTaskPage() {
   const [apiError, setApiError] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const {
     register,
     handleSubmit,
-    reset,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(schema),
+    defaultValues: {
+      title: '',
+      description: '',
+      priority: 'medium',
+      status: 'pending',
+      dueDate: new Date().toISOString().split('T')[0], // Default to today's date local
+    },
   });
 
-  useEffect(() => {
-    const fetchTaskDetails = async () => {
-      setLoading(true);
-      setApiError('');
-      try {
-        const task = await taskService.getTask(id);
-        if (task.status === 'completed') {
-          setIsCompleted(true);
-        }
-        // Format dueDate to YYYY-MM-DD for the HTML5 date input
-        const formattedDate = task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '';
-        reset({
-          title: task.title,
-          description: task.description || '',
-          priority: task.priority,
-          status: task.status,
-          dueDate: formattedDate,
-        });
-      } catch (err) {
-        setApiError(err.response?.data?.message || 'Failed to retrieve task details.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTaskDetails();
-  }, [id, reset]);
-
   const onSubmit = async (values) => {
-    if (isCompleted) return;
     setApiError('');
-    setSaving(true);
+    setLoading(true);
     try {
-      await taskService.updateTask(id, values);
+      await taskService.createTask(values);
       navigate('/tasks');
     } catch (error) {
-      const message = error.response?.data?.message || 'Failed to update task';
+      const message = error.response?.data?.message || 'Failed to create task';
       setApiError(message);
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <PageContainer title="Edit Task">
-        <div className="flex h-64 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-        </div>
-      </PageContainer>
-    );
-  }
-
   return (
     <PageContainer
-      title="Edit Task"
-      banner={
-        <>
-          {apiError && <ErrorBanner message={apiError} />}
-          {isCompleted && (
-            <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
-              ⚠️ <strong>This task is completed.</strong> Completed tasks cannot be edited directly. To make changes, please change its status back to <em>Pending</em> or <em>In Progress</em> in the Tasks Manager.
-            </div>
-          )}
-        </>
-      }
+      title="Create New Task"
+      banner={apiError && <ErrorBanner message={apiError} />}
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 max-w-lg">
         {/* Title */}
@@ -115,22 +72,20 @@ export default function EditTaskPage() {
           name="title"
           register={register}
           errors={errors}
-          disabled={isCompleted}
           placeholder="Enter task title"
         />
 
         {/* Description */}
         <div>
           <label className="block text-sm font-semibold text-slate-700 mb-1.5" htmlFor="description">
-            Description
+            Description (Optional)
           </label>
           <textarea
             id="description"
             rows="4"
             {...register('description')}
-            disabled={isCompleted}
             placeholder="Add detailed task notes..."
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all disabled:bg-slate-50 disabled:text-slate-500"
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
           ></textarea>
           {errors.description && (
             <p className="mt-1 text-xs text-red-650">{errors.description.message}</p>
@@ -146,8 +101,7 @@ export default function EditTaskPage() {
             <select
               id="priority"
               {...register('priority')}
-              disabled={isCompleted}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all disabled:bg-slate-50 disabled:text-slate-500"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
@@ -166,8 +120,7 @@ export default function EditTaskPage() {
             <select
               id="status"
               {...register('status')}
-              disabled={isCompleted}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all disabled:bg-slate-50 disabled:text-slate-500"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
             >
               <option value="pending">Pending</option>
               <option value="in_progress">In Progress</option>
@@ -189,8 +142,7 @@ export default function EditTaskPage() {
             id="dueDate"
             type="date"
             {...register('dueDate')}
-            disabled={isCompleted}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all disabled:bg-slate-50 disabled:text-slate-500"
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
           />
           {errors.dueDate && (
             <p className="mt-1 text-xs text-red-650">{errors.dueDate.message}</p>
@@ -199,20 +151,18 @@ export default function EditTaskPage() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-3 pt-3">
-          {!isCompleted && (
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {loading ? 'Creating...' : 'Create Task'}
+          </button>
           <Link
             to="/tasks"
-            className="flex-1 sm:flex-initial inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 text-center"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50"
           >
-            {isCompleted ? 'Go Back' : 'Cancel'}
+            Cancel
           </Link>
         </div>
       </form>
